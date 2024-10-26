@@ -4,25 +4,36 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 func main() {
-	err, bodyData := RequestAndProvide()
-	if err != nil {
+	start := time.Now()
+
+	bodyDataChannel := make(chan []byte)
+	errChannel := make(chan error)
+	go requestAndProvide(bodyDataChannel, errChannel)
+
+	select {
+	case bodyData := <-bodyDataChannel:
+		// Body has been received.
+		fmt.Println("Body: ", string(bodyData))
+	case err := <-errChannel:
 		fmt.Println("Error: ", err)
-		return
 	}
-	fmt.Println("Body: ", string(bodyData))
+	fmt.Println("Time elapsed: ", time.Since(start))
 }
 
-func RequestAndProvide() (error, []byte) {
+func requestAndProvide(dataChannel chan []byte, errChannel chan error) {
 	resp, err := http.Get("https://api.github.com/repos/aivruu/repo-viewer")
 	if err != nil {
-		return err, nil
+		errChannel <- err
+		return
 	}
 	readBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err, nil
+		errChannel <- err
+		return
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -31,5 +42,5 @@ func RequestAndProvide() (error, []byte) {
 		}
 	}(resp.Body)
 	err = nil
-	return err, readBytes
+	dataChannel <- readBytes
 }
